@@ -1,15 +1,40 @@
 rules:
+  - id: sql-injection-taint
+    mode: taint
+    pattern-sources:
+      - pattern: req.body
+      - pattern: req.query
+      - pattern: req.params
+    pattern-sanitizers:
+      - pattern: parseInt(...)
+      - pattern: Number(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: db.get($SQL, ...)
+              - pattern: db.all($SQL, ...)
+              - pattern: db.run($SQL, ...)
+          - focus-metavariable: $SQL
+    message: >-
+      SQL Injection (CWE-89) — une donnée provenant de la requête HTTP
+      atteint une requête SQL sans assainissement. Utiliser une requête
+      préparée : db.get('SELECT ... WHERE email = ?', [email], callback)
+    languages: [javascript]
+    severity: ERROR
+    metadata:
+      cwe: CWE-89
+      owasp: A03:2021
+
   - id: sql-injection-concatenation
-    patterns:
-      - pattern: |
-          $Q = "..." + $INPUT + "..."
-      - pattern: |
-          db.get("..." + $INPUT + "...", ...)
-      - pattern: |
-          db.run("..." + $INPUT + "...", ...)
-      - pattern: |
-          db.all("..." + $INPUT + "...", ...)
-    message: "SQL Injection détectée — utiliser des requêtes préparées"
+    pattern-either:
+      - pattern: db.get("..." + $INPUT + "...", ...)
+      - pattern: db.run("..." + $INPUT + "...", ...)
+      - pattern: db.all("..." + $INPUT + "...", ...)
+      - pattern: $Q = `...${$INPUT}...`
+    message: >-
+      SQL Injection (CWE-89) — requête construite par concaténation ou
+      template literal contenant une variable interpolée. Utiliser une
+      requête préparée avec des paramètres liés (?).
     languages: [javascript]
     severity: ERROR
     metadata:
@@ -27,6 +52,16 @@ rules:
           metavariable: $SECRET
           regex: .{8,}
     message: "Secret hardcodé détecté — utiliser les variables d'environnement"
+    languages: [javascript]
+    severity: ERROR
+    metadata:
+      cwe: CWE-798
+
+  - id: hardcoded-secret-inline-arg
+    pattern: jwt.sign($PAYLOAD, "$SECRET", ...)
+    message: >-
+      Secret JWT hardcodé en argument direct (CWE-798) — utiliser
+      process.env.JWT_SECRET au lieu d'une chaîne littérale.
     languages: [javascript]
     severity: ERROR
     metadata:
